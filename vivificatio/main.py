@@ -3,13 +3,14 @@ from cosmos import cosmos
 import random
 import argparse
 import logging
+import statistics as st
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Vivifiacatio")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Enable debug mode")
-    parser.add_argument("-r", "--rounds", type=int, default=1, help="Simulation rounds")
-    parser.add_argument("--seed", type=int, default=None, help="Specify a random seed")
+    parser.add_argument("-r", "--rounds", type=int, default=100, help="Simulation rounds")
+    parser.add_argument("-s", "--seed", type=int, default=None, help="Specify a random seed")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -19,7 +20,7 @@ def parse_args():
 
     return args
 
-def main():
+def main() -> None:
     args = parse_args()
 
     seed = args.seed
@@ -29,18 +30,32 @@ def main():
     print(f"Random seed: {seed}")
 
     max_rounds = args.rounds
-    stat = []
+    print(f"Set rounds : {max_rounds}")
+    stat_valid = []
+    stat_super = 0
     try:
         for _ in range(max_rounds):
-            stat.append(cosmos())
+            c = cosmos()
+            if c == -1:
+                continue
+            if c == -2:
+                stat_super += 1
+            else:
+                stat_valid.append(c)
     except KeyboardInterrupt:
         print("\tInterrupted.")
 
-    if stat:
+    if stat_valid:
         print(
-            f"Rounds: {len(stat)}\t"
-            f"Max Gen. Observed: {max(stat)}\t"
-            f"Mean Max Gen.: {sum(stat) / len(stat)}"
+            f"Valid cosmos: {len(stat_valid)}\n"
+            f"Max Gen. Observed: {max(stat_valid)}\t"
+            f"Mean Max Gen.: {st.mean(stat_valid):.2f}\t"
+            f"Median: {st.median(stat_valid)}\t"
+            f"Std: {st.pstdev(stat_valid):.2f}"
+        )
+    if stat_super:
+        print(
+            f"Super cosmos: {stat_super}\n"
         )
 
 if __name__ == "__main__":
