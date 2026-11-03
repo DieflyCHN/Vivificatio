@@ -42,7 +42,7 @@ class Anima:
         self.life = CFG.LIFE
 
     def reproduction(self, uid):
-        if self.express()["C"] <= 6:
+        if self.express().get("C", 0) <= 6:
             return False
 
         child = Anima(self.generation + 1)
