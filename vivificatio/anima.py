@@ -2,7 +2,7 @@ import random
 
 class ANIMA_CFG:
     # Life
-    LIFE = 2
+    LIFE = 1
 
     # Codon
     CODON = ["A", "B", "C", "D", "E", "F", "G",
@@ -10,14 +10,26 @@ class ANIMA_CFG:
              "O", "P", "Q", "R", "S", "T", "U",
              "V", "W", "X", "Y", "Z"]
 
+    # Reproduction
+    REPRO_THRESHOLD = 7
+        # List of important valus:
+        # Max(n)    1       2       3       4       5
+        # Sum       1       1.875   2.688   3.469   4.234
+        # Max(n)    6       7       8       9       10
+        # Sum       4.992   5.746   6.498   7.249   7.9995
+    
+    
     # Expression
     PROMOTER_BOOST = 0.25
     BASE_EXPRESSION = 1 - PROMOTER_BOOST
     DECAY = 0.5
 
     # Mutation
+    MUTATION_RATE = 0.2    # 20%
+    MUTATION_TYPE = ["Substitution", "Insertion", "Deletion", "Inversion", "Duplication"]
+
     DUPLICATION_START = 1
-    DUPLICATION_END = 3
+    DUPLICATION_END = 2
 
 CFG = ANIMA_CFG
 
@@ -28,7 +40,10 @@ class Anima:
     Fiat vita!
     """
 
-    def __init__(self, gen):
+    def __init__(self):
+        self.uid = 1
+        self.parent_uid = 0
+        self.generation = 1
         self.genome = {
             "tel_l": "ABCABCABC",       # Telomere_left
             "start": "SSS",             # Start Codon
@@ -36,26 +51,25 @@ class Anima:
             "stop": "EEE",              # Stop Codon
             "tel_r": "ABCABCABC"        # Telomere_right
         }
-        self.generation = gen
-        self.uid = 1
-        self.parrent_uid = 0
-        self.life = CFG.LIFE
+        self.life: int = CFG.LIFE
 
-    def reproduction(self, uid):
-        if self.express().get("C", 0) <= 6:
-            return False
+    def can_reproduce(self) -> bool:
+        return self.express().get("C", 0) > CFG.REPRO_THRESHOLD
 
-        child = Anima(self.generation + 1)
+    def reproduction(self, uid) -> "Anima":
+        child = Anima()
         child.genome = self.genome.copy()
         child.uid = uid
-        child.parrent_uid = self.uid
-        
-        child.genome["functional"] = self.mutation("Substitution")
+        child.parent_uid = self.uid
+        child.generation = self.generation + 1
+
+        if random.random() < CFG.MUTATION_RATE:
+            child.genome["functional"] = self.mutation(random.choice(CFG.MUTATION_TYPE))
 
         # TODO: complexer mutation during replication
         return child
 
-    def express(self):
+    def express(self) -> dict[str, int]:
         seq = self.genome["functional"]
         out = {}
         for n, char in enumerate(seq):
@@ -63,7 +77,7 @@ class Anima:
             out[char] = out.get(char, 0) + w
         return out
 
-    def mutation(self, op):
+    def mutation(self, op) -> str:
         seq = list(self.genome["functional"])
 
         match op:
@@ -115,5 +129,3 @@ class Anima:
                 raise ValueError(f"Unknown mutation: {op}")
 
         return "".join(seq)
-
-            
