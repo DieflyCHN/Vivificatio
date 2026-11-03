@@ -1,6 +1,9 @@
 import random
 
 class ANIMA_CFG:
+    # Life
+    LIFE = 2
+
     # Codon
     CODON = ["A", "B", "C", "D", "E", "F", "G",
              "H", "I", "J", "K", "L", "M", "N",
@@ -35,6 +38,8 @@ class Anima:
         }
         self.generation = gen
         self.uid = 1
+        self.parrent_uid = 0
+        self.life = CFG.LIFE
 
     def reproduction(self, uid):
         if self.express()["C"] <= 6:
@@ -43,6 +48,7 @@ class Anima:
         child = Anima(self.generation + 1)
         child.genome = self.genome.copy()
         child.uid = uid
+        child.parrent_uid = self.uid
         
         child.genome["functional"] = self.mutation("Substitution")
 
