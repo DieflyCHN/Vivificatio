@@ -4,6 +4,14 @@ import time
 import logging
 logger = logging.getLogger(__name__)
 
+class anima_cfg:
+    # Creatura
+    CREATURA_NUMBER_LIMIT = 100000
+
+    # Debug time interval
+    TIME_INTERVAL = 0.5
+
+CFG = anima_cfg
 def cosmos() -> int:
     """
     return: max generation of this cosmos.\n
@@ -21,7 +29,7 @@ def cosmos() -> int:
         logger.warning("G1 can't reproduct. Please check can_reproduce() and settings.")
         return -1
     
-    while len(creatura) < 100000:   # Can be a config
+    while len(creatura) < CFG.CREATURA_NUMBER_LIMIT:
         children = []
         survivors = []
 
@@ -37,17 +45,23 @@ def cosmos() -> int:
             survivors.append(anima)
 
             if anima.can_reproduce():
-                child = anima.reproduction(uidnumber)
-                children.append(child)
-                logger.debug("G%s_UID%d -> G%s_UID%d",
-                              child.generation - 1, child.parent_uid,
-                              child.generation, child.uid)
-                logger.debug("%s", child.genome["functional"])
-                uidnumber += 1
-                generation = max(generation, child.generation)
+                if anima.can_double_reproduce():
+                    uidnumber, generation = one_child(anima, children, uidnumber, generation)
+                uidnumber, generation = one_child(anima, children, uidnumber, generation)
             anima.life -= 1
         
         creatura = survivors + children
         if logger.isEnabledFor(logging.DEBUG):
-            time.sleep(0.5)
+            time.sleep(CFG.TIME_INTERVAL)
     return -2
+
+def one_child(anima: Anima, children: list, uidnumber: int, generation: int) -> tuple[int, int]:
+    child = anima.reproduction(uidnumber)
+    children.append(child)
+    logger.debug("G%s_UID%d -> G%s_UID%d",
+                    child.generation - 1, child.parent_uid,
+                    child.generation, child.uid)
+    logger.debug("%s", child.genome["functional"])
+    uidnumber += 1
+    generation = max(generation, child.generation)
+    return uidnumber, generation

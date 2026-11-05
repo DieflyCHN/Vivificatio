@@ -4,20 +4,30 @@ class ANIMA_CFG:
     # Life
     LIFE = 10
 
-    # Codon
+    # Codon ------------------------------------------------------------------------
     CODON = ["A", "B", "C", "D", "E", "F", "G",
              "H", "I", "J", "K", "L", "M", "N",
              "O", "P", "Q", "R", "S", "T", "U",
              "V", "W", "X", "Y", "Z"]
     # UYZ: Telomere specific codon
+
     # C: Copy
     # D: Double reproduction (2 children)
+    D_THRESHOLD = 1.875
     # H: Higher mutation rate
+    H_EFFECT = 0.1
     # L: Lower mutation rate
+    L_EFFECT = -0.1
     # P: Protect Telomere
     P_EFFECT = -0.05
     # X: "Recessive homozygous pathogenic", 1X = safe, 2X = infertile
-    # Q: Quicker reproduction (earlier reproductive age)    # TODO: reproductive age
+    # Q: Quicker reproduction (earlier reproductive age)    # TODO: reproductive age and following
+
+    # Codon about resource ---------------------------------------------------------
+    # E: Faster (more efficient) energy acquisition
+    # S: (Sleep) Lower energy consum AND less reproduction willing
+    # R: Greater energy reserves
+    # N: Hunger-resistant, hardy (Possible cause: Low metabolism)
 
     # Reproduction
     REPRO_THRESHOLD = 7
@@ -40,7 +50,7 @@ class ANIMA_CFG:
     DUPLICATION_START = 1
     DUPLICATION_END = 2
     
-    MUTATION_RATE_FUN = 0.2   # 20%
+    MUTATION_RATE_FUN = 0.8   # 20%
     MUTATION_RATE_TEL = 0.9   # 90%
 
 
@@ -52,7 +62,7 @@ class Anima:
     Fiat vita!
     """
 
-    def __init__(self, *, uid=1, parent_uid=0, generation=1, genome=None):
+    def __init__(self, *, uid=1, parent_uid=0, generation=1, genome=None, mutation_history=""):
         self.uid = uid
         self.parent_uid = parent_uid
         self.generation = generation
@@ -68,6 +78,7 @@ class Anima:
         self.func_expr_by_weig = {}
         self.telo_length = 0
         self.update_codon_stat()
+        self.mutation_history = mutation_history
 
     def can_reproduce(self) -> bool: 
         if self.telo_length <= 16:
@@ -78,17 +89,25 @@ class Anima:
 
     def reproduction(self, uid) -> "Anima":
         genome = self.genome.copy()
+        history = []
 
-        if random.random() < CFG.MUTATION_RATE_FUN:
-            genome["functional"] = self.mutation(random.choice(CFG.MUTATION_TYPE), "functional")
+        fun_rate = min(max(CFG.MUTATION_RATE_FUN +
+                           self.func_expr_by_freq.get("H", 0) * CFG.H_EFFECT +
+                           self.func_expr_by_freq.get("L", 0) * CFG.L_EFFECT, 0), 1)
+        if random.random() < fun_rate:
+            genome["functional"], detail = self.mutation(random.choice(CFG.MUTATION_TYPE), "functional")
+            if detail:
+                history.append(detail)
 
         p_expr = self.func_expr_by_weig.get("P", 0)
         tel_rate = CFG.MUTATION_RATE_TEL + p_expr * CFG.P_EFFECT
         if random.random() < tel_rate:
             tele_loc = random.choice(CFG.TELEMERE_LOC)
-            genome[tele_loc] = self.mutation("Deletion", tele_loc)
+            genome[tele_loc], detail = self.mutation("Deletion", tele_loc)
+            if detail:
+                history.append(detail)
 
-        return Anima(uid=uid, parent_uid=self.uid, generation=self.generation + 1, genome=genome)
+        return Anima(uid=uid, parent_uid=self.uid, generation=self.generation + 1, genome=genome, mutation_history=";\t".join(history))
 
     def express_by_frequency(self, genome_char) -> dict[str, int]:
         seq = self.genome[genome_char]
@@ -110,43 +129,50 @@ class Anima:
         self.func_expr_by_weig = self.express_by_weight("functional")
         self.telo_length = len(self.genome["tel_l"]) + len(self.genome["tel_r"])
 
-    def mutation(self, op, genome_char) -> str:
+    def mutation(self, op, genome_char) -> tuple[str, str]:
         seq = list(self.genome[genome_char])
+        detail = ""
 
         match op:
             case "Substitution":
                 if not seq:
-                    return ""
+                    return "", ""
 
                 location = random.randrange(len(seq))
                 while True:
                     new_base = random.choice(CFG.CODON)
                     if new_base != seq[location]:
                         seq[location] = new_base
+                        detail = f"{location}{new_base}"
                         break
 
             case "Insertion":
                 location = random.randrange(len(seq) + 1)
                 new_base = random.choice(CFG.CODON)
                 seq.insert(location, new_base)
+                detail = f"{location}{new_base}"
 
             case "Deletion":
                 if not seq:
-                    return ""
+                    return "", ""
 
                 location = random.randrange(len(seq))
                 seq.pop(location)
+                detail = f"{location}"
+
 
             case "Inversion":
                 if len(seq) < 2:
-                    return "".join(seq)
+                    return "".join(seq), ""
 
                 left, right = sorted(random.sample(range(len(seq)), 2))
                 seq[left:right + 1] = seq[left:right + 1][::-1]
+                detail = f"{left}-{right}"
+
 
             case "Duplication":
                 if not seq:
-                    return ""
+                    return "", ""
 
                 location = random.randrange(len(seq))
                 times = random.randint(
@@ -156,9 +182,13 @@ class Anima:
 
                 base = seq[location]
                 seq[location:location] = [base] * times
+                detail = f"{location}{times}"
                 # TODO: Support segmental duplication in future versions.
 
             case _:
                 raise ValueError(f"Unknown mutation: {op}")
 
-        return "".join(seq)
+        return "".join(seq), f"{genome_char}:{op}:{detail}"
+
+    def can_double_reproduce(self):
+        return self.func_expr_by_weig.get("D", 0) >= CFG.D_THRESHOLD
