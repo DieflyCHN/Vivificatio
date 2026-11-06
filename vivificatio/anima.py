@@ -3,6 +3,7 @@ import random
 class ANIMA_CFG:
     # Life
     LIFE = 10
+    REPRODUCE_WILLING = 1   # 100%
 
     # Codon ------------------------------------------------------------------------
     CODON = ["A", "B", "C", "D", "E", "F", "G",
@@ -25,9 +26,32 @@ class ANIMA_CFG:
 
     # Codon about resource ---------------------------------------------------------
     # E: Faster (more efficient) energy acquisition
+    E_EFFECT = 0.25    # +25% aquisition
     # S: (Sleep) Lower energy consum AND less reproduction willing
+    S_EFFECT = [-0.2, -0.1]  # -20% daily consum, -10% rep. willing
+    """
+    [0]: daily consum (usage: 1 + ...[0])\n
+    [1]: reproduction willing (usage: 1+ ...[1])
+    """
     # R: Greater energy reserves
-    # N: Hunger-resistant, hardy (Possible cause: Low metabolism)
+    R_EFFECT = 0.15 # +15% reserves
+    # M: Low metabolism AND less movement (e.g. finding food)
+    M_EFFECT = [-0.9, -0.5] # -90% daily consum, -50% aquisition
+    """
+    [0]: daily consum (usage: 1 + ...[0])\n
+    [1]: aquisition (usage: 1 + ...[1])
+    """
+    # N: Hunger-resistant, hardy
+    N_EFFECT = 1    # Survive for 1 tick more under starving
+    # F: No confinement (Possible cause: less energy consum by reproduction)
+    F_EFFECT = -0.3 # -30%
+
+    # Energy
+    ENERGY_AQUI_EFFICIENCY = 2  # 200%, which means that anima every tick can get "2" food
+    ENERGY_CONSUM_DAILY = 1     # For each tick need "1" food
+    ENERGY_CONSUM_REPRO = 1     # For each child need "1" food
+    ENERGY_RESERVE_MAX = 10     # "10" food
+    STARVING_MAX = 3        # 3 ticks
 
     # Reproduction
     REPRO_THRESHOLD = 7
@@ -50,7 +74,7 @@ class ANIMA_CFG:
     DUPLICATION_START = 1
     DUPLICATION_END = 2
     
-    MUTATION_RATE_FUN = 0.8   # 20%
+    MUTATION_RATE_FUN = 0.8   # 80%
     MUTATION_RATE_TEL = 0.9   # 90%
 
 
@@ -67,6 +91,8 @@ class Anima:
         self.parent_uid = parent_uid
         self.generation = generation
         self.life: int = CFG.LIFE
+        self.reproduction_willing = CFG.REPRODUCE_WILLING
+
         self.genome = genome if genome is not None else{
             "tel_l": "UYZUYZUYZ",       # Telomere_left
             "start": "SSS",             # Start Codon
@@ -77,8 +103,17 @@ class Anima:
         self.func_expr_by_freq = {}
         self.func_expr_by_weig = {}
         self.telo_length = 0
-        self.update_codon_stat()
+        
         self.mutation_history = mutation_history
+
+        self.energy_aqui_efficiency = 0
+        self.energy_consum_daily = 0
+        self.energy_consum_repro = 0
+        self.energy_reserve_max = 0
+        self.energy_reserve = 0
+        self.starving = 0   # False
+
+        self.update_stat()
 
     def can_reproduce(self) -> bool: 
         if self.telo_length <= 16:
@@ -86,6 +121,9 @@ class Anima:
         if self.func_expr_by_freq.get("X", 0) >= 2:
             return False
         return self.func_expr_by_weig.get("C", 0) > CFG.REPRO_THRESHOLD
+
+    def can_double_reproduce(self) -> bool:
+            return self.func_expr_by_weig.get("D", 0) >= CFG.D_THRESHOLD
 
     def reproduction(self, uid) -> "Anima":
         genome = self.genome.copy()
@@ -107,6 +145,11 @@ class Anima:
             if detail:
                 history.append(detail)
 
+        self.energy_reserve -= self.energy_consum_repro
+        # Warning! Possible starving caused by reproduction will in this version
+        # take effects for parent_anima in the next tick, instead of instantly,
+        # because do_a_tick() is written before reproduction()
+        # IT WILL BE FIXED IN NEXT VERSION. PLEASE SEE TODO IN do_a_tick().   
         return Anima(uid=uid, parent_uid=self.uid, generation=self.generation + 1, genome=genome, mutation_history=";\t".join(history))
 
     def express_by_frequency(self, genome_char) -> dict[str, int]:
@@ -124,10 +167,23 @@ class Anima:
             out[char] = out.get(char, 0) + w
         return out
 
-    def update_codon_stat(self) -> None:
+    def update_stat(self) -> None:
         self.func_expr_by_freq = self.express_by_frequency("functional")
         self.func_expr_by_weig = self.express_by_weight("functional")
         self.telo_length = len(self.genome["tel_l"]) + len(self.genome["tel_r"])
+
+        self.reproduction_willing = (CFG.REPRODUCE_WILLING *
+                                     (1 + CFG.S_EFFECT[1]) ** self.func_expr_by_freq.get("S", 0))
+        self.energy_aqui_efficiency = (CFG.ENERGY_AQUI_EFFICIENCY
+                                       * (1 + CFG.E_EFFECT) ** self.func_expr_by_freq.get("E", 0)
+                                       * (1 + CFG.M_EFFECT[1]) ** self.func_expr_by_freq.get("M", 0))
+        self.energy_consum_daily = (CFG.ENERGY_CONSUM_DAILY
+                                    * (1 + CFG.S_EFFECT[0]) ** self.func_expr_by_freq.get("S", 0)
+                                    * (1 + CFG.M_EFFECT[0]) ** self.func_expr_by_freq.get("M", 0))
+        self.energy_consum_repro = (CFG.ENERGY_CONSUM_REPRO
+                                    * (1 + CFG.F_EFFECT) ** self.func_expr_by_freq.get("F", 0))
+        self.energy_reserve_max = (CFG.ENERGY_RESERVE_MAX * 
+                                   (1 + CFG.R_EFFECT) ** self.func_expr_by_freq.get("R", 0))
 
     def mutation(self, op, genome_char) -> tuple[str, str]:
         seq = list(self.genome[genome_char])
@@ -190,5 +246,15 @@ class Anima:
 
         return "".join(seq), f"{genome_char}:{op}:{detail}"
 
-    def can_double_reproduce(self):
-        return self.func_expr_by_weig.get("D", 0) >= CFG.D_THRESHOLD
+    def do_a_tick(self) -> None:
+        if self.starving >= CFG.STARVING_MAX + self.func_expr_by_freq.get("N", 0) * CFG.N_EFFECT:
+            self.life = 0
+            return None
+        self.energy_reserve = min(self.energy_reserve_max,
+                                  self.energy_reserve + self.energy_aqui_efficiency - self.energy_consum_daily)
+        if self.energy_reserve <= 0:
+            self.starving += 1
+        else:
+            self.starving = 0
+
+        # TODO: Make do_a_tick() fully functional, instead of still leaving sth. in cosmos() and reproduction()
