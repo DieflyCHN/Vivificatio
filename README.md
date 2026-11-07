@@ -97,3 +97,6 @@ w(n) = 0.75 + 0.25 × 0.5^n，n 从 0 开始
 - `vivificatio/main.py`：命令行参数、随机种子、多轮串行实验与结果汇总。
 
 当前为单进程串行运行。主要模型参数在 `ANIMA_CFG` 中调整，人口上限目前写在 `cosmos.py` 中。
+
+## FUTURE
+- 使用 Markov belief 识别种群增长状态，辅助筛选实验。
