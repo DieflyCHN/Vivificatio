@@ -7,10 +7,10 @@ import random
 
 class anima_cfg:
     # Creatura
-    CREATURA_NUMBER_LIMIT = 100000
+    CREATURA_NUMBER_LIMIT = 10000000
 
     # Debug time interval
-    TIME_INTERVAL = 0.5
+    TIME_INTERVAL = 0
 
 CFG = anima_cfg
 def cosmos() -> int:

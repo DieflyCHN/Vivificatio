@@ -86,7 +86,7 @@ class Anima:
     Fiat vita!
     """
 
-    def __init__(self, *, uid=1, parent_uid=0, generation=1, genome=None, mutation_history=""):
+    def __init__(self, *, uid=1, parent_uid=0, generation=1, genome=None):
         self.uid = uid
         self.parent_uid = parent_uid
         self.generation = generation
@@ -103,8 +103,6 @@ class Anima:
         self.func_expr_by_freq = {}
         self.func_expr_by_weig = {}
         self.telo_length = 0
-        
-        self.mutation_history = mutation_history
 
         self.energy_aqui_efficiency = 0
         self.energy_consum_daily = 0
@@ -127,44 +125,41 @@ class Anima:
 
     def reproduction(self, uid) -> "Anima":
         genome = self.genome.copy()
-        history = []
 
         fun_rate = min(max(CFG.MUTATION_RATE_FUN +
                            self.func_expr_by_freq.get("H", 0) * CFG.H_EFFECT +
                            self.func_expr_by_freq.get("L", 0) * CFG.L_EFFECT, 0), 1)
         if random.random() < fun_rate:
-            genome["functional"], detail = self.mutation(random.choice(CFG.MUTATION_TYPE), "functional")
-            if detail:
-                history.append(detail)
+            genome["functional"] = self.mutation(random.choice(CFG.MUTATION_TYPE), "functional")
 
         p_expr = self.func_expr_by_weig.get("P", 0)
         tel_rate = CFG.MUTATION_RATE_TEL + p_expr * CFG.P_EFFECT
         if random.random() < tel_rate:
             tele_loc = random.choice(CFG.TELEMERE_LOC)
-            genome[tele_loc], detail = self.mutation("Deletion", tele_loc)
-            if detail:
-                history.append(detail)
+            genome[tele_loc] = self.mutation("Deletion", tele_loc)
 
         self.energy_reserve -= self.energy_consum_repro
         # Warning! Possible starving caused by reproduction will in this version
         # take effects for parent_anima in the next tick, instead of instantly,
         # because do_a_tick() is written before reproduction()
         # IT WILL BE FIXED IN NEXT VERSION. PLEASE SEE TODO IN do_a_tick().   
-        return Anima(uid=uid, parent_uid=self.uid, generation=self.generation + 1, genome=genome, mutation_history=";\t".join(history))
+        return Anima(uid=uid, parent_uid=self.uid, generation=self.generation + 1, genome=genome)
 
     def express_by_frequency(self, genome_char) -> dict[str, int]:
         seq = self.genome[genome_char]
         out = {}
         for n, char in enumerate(seq):
-            out[char] = out.get(char, 0) + 1
+            if char in ("E", "F", "H", "L", "M", "N", "R", "S", "X"):
+                out[char] = out.get(char, 0) + 1
         return out
 
     def express_by_weight(self, genome_char) -> dict[str, int]:
         seq = self.genome[genome_char]
         out = {}
         for n, char in enumerate(seq):
-            w = CFG.BASE_EXPRESSION + CFG.PROMOTER_BOOST * (CFG.DECAY ** n)
-            out[char] = out.get(char, 0) + w
+            if char in ("C", "D", "P"):
+                w = CFG.BASE_EXPRESSION + CFG.PROMOTER_BOOST * (CFG.DECAY ** n)
+                out[char] = out.get(char, 0) + w
         return out
 
     def update_stat(self) -> None:
@@ -185,50 +180,43 @@ class Anima:
         self.energy_reserve_max = (CFG.ENERGY_RESERVE_MAX * 
                                    (1 + CFG.R_EFFECT) ** self.func_expr_by_freq.get("R", 0))
 
-    def mutation(self, op, genome_char) -> tuple[str, str]:
+    def mutation(self, op, genome_char) -> str:
         seq = list(self.genome[genome_char])
-        detail = ""
 
         match op:
             case "Substitution":
                 if not seq:
-                    return "", ""
+                    return ""
 
                 location = random.randrange(len(seq))
                 while True:
                     new_base = random.choice(CFG.CODON)
                     if new_base != seq[location]:
                         seq[location] = new_base
-                        detail = f"{location}{new_base}"
                         break
 
             case "Insertion":
                 location = random.randrange(len(seq) + 1)
                 new_base = random.choice(CFG.CODON)
                 seq.insert(location, new_base)
-                detail = f"{location}{new_base}"
 
             case "Deletion":
                 if not seq:
-                    return "", ""
+                    return ""
 
                 location = random.randrange(len(seq))
                 seq.pop(location)
-                detail = f"{location}"
-
 
             case "Inversion":
                 if len(seq) < 2:
-                    return "".join(seq), ""
+                    return "".join(seq)
 
                 left, right = sorted(random.sample(range(len(seq)), 2))
                 seq[left:right + 1] = seq[left:right + 1][::-1]
-                detail = f"{left}-{right}"
-
 
             case "Duplication":
                 if not seq:
-                    return "", ""
+                    return ""
 
                 location = random.randrange(len(seq))
                 times = random.randint(
@@ -238,13 +226,12 @@ class Anima:
 
                 base = seq[location]
                 seq[location:location] = [base] * times
-                detail = f"{location}{times}"
                 # TODO: Support segmental duplication in future versions.
 
             case _:
                 raise ValueError(f"Unknown mutation: {op}")
 
-        return "".join(seq), f"{genome_char}:{op}:{detail}"
+        return "".join(seq)
 
     def do_a_tick(self) -> None:
         if self.starving >= CFG.STARVING_MAX + self.func_expr_by_freq.get("N", 0) * CFG.N_EFFECT:
