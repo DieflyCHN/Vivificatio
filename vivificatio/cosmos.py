@@ -3,7 +3,6 @@ from anima import Anima
 import time
 import logging
 logger = logging.getLogger(__name__)
-import random
 
 class anima_cfg:
     # Creatura
@@ -39,31 +38,15 @@ def cosmos() -> int:
             return generation
                     
         for anima in creatura:
-            anima.do_a_tick()
-            if anima.life <= 0:
-                logger.debug("G%s_UID%d is now dead.", anima.generation, anima.uid)
-                continue
-
-            survivors.append(anima)
-
-            if anima.can_reproduce() and random.random() < anima.reproduction_willing:
-                if anima.can_double_reproduce():
-                    uidnumber, generation = one_child(anima, children, uidnumber, generation)
-                uidnumber, generation = one_child(anima, children, uidnumber, generation)
-            anima.life -= 1
-        
+            status, children, uidnumber, generation = anima.do_a_tick(children, uidnumber, generation)
+            if status != -1:
+                survivors.append(anima)
+                
+                
         creatura = survivors + children
+
         if logger.isEnabledFor(logging.DEBUG):
             time.sleep(CFG.TIME_INTERVAL)
+
     return -2
 
-def one_child(anima: Anima, children: list, uidnumber: int, generation: int) -> tuple[int, int]:
-    child = anima.reproduction(uidnumber)
-    children.append(child)
-    logger.debug("G%s_UID%d -> G%s_UID%d",
-                    child.generation - 1, child.parent_uid,
-                    child.generation, child.uid)
-    logger.debug("%s", child.genome["functional"])
-    uidnumber += 1
-    generation = max(generation, child.generation)
-    return uidnumber, generation

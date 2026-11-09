@@ -1,6 +1,14 @@
 import random
+import logging
+logger = logging.getLogger(__name__)
 
 class ANIMA_CFG:
+    # List of important valus:
+    # Max(n)    1       2       3       4       5
+    # Sum       1       1.875   2.688   3.469   4.234
+    # Max(n)    6       7       8       9       10
+    # Sum       4.992   5.746   6.498   7.249   7.9995
+
     # Life
     LIFE = 10
     REPRODUCE_WILLING = 1   # 100%
@@ -13,6 +21,7 @@ class ANIMA_CFG:
     # UYZ: Telomere specific codon
 
     # C: Copy
+    REPRO_THRESHOLD = 6.498 # Min. 8 effective C, more normally 9
     # D: Double reproduction (2 children)
     D_THRESHOLD = 1.875
     # H: Higher mutation rate
@@ -52,14 +61,6 @@ class ANIMA_CFG:
     ENERGY_CONSUM_REPRO = 1     # For each child need "1" food
     ENERGY_RESERVE_MAX = 10     # "10" food
     STARVING_MAX = 3        # 3 ticks
-
-    # Reproduction
-    REPRO_THRESHOLD = 7
-        # List of important valus:
-        # Max(n)    1       2       3       4       5
-        # Sum       1       1.875   2.688   3.469   4.234
-        # Max(n)    6       7       8       9       10
-        # Sum       4.992   5.746   6.498   7.249   7.9995
     
     # Expression weight
     PROMOTER_BOOST = 0.25
@@ -139,10 +140,6 @@ class Anima:
             genome[tele_loc] = self.mutation("Deletion", tele_loc)
 
         self.energy_reserve -= self.energy_consum_repro
-        # Warning! Possible starving caused by reproduction will in this version
-        # take effects for parent_anima in the next tick, instead of instantly,
-        # because do_a_tick() is written before reproduction()
-        # IT WILL BE FIXED IN NEXT VERSION. PLEASE SEE TODO IN do_a_tick().   
         return Anima(uid=uid, parent_uid=self.uid, generation=self.generation + 1, genome=genome)
 
     def express_by_frequency(self, genome_char) -> dict[str, int]:
@@ -233,10 +230,14 @@ class Anima:
 
         return "".join(seq)
 
-    def do_a_tick(self) -> None:
-        if self.starving >= CFG.STARVING_MAX + self.func_expr_by_freq.get("N", 0) * CFG.N_EFFECT:
-            self.life = 0
-            return None
+    def do_a_tick(self, children: list, uidnumber: int, generation: int) -> tuple[int, list, int, int]:
+        # Warning! Possible starving caused by reproduction will in this version
+        # take effects for parent_anima in the next tick, instead of instantly.
+        # Because can_reproduce() is written after the check below VVV
+        if self.life <= 0 or self.starving >= CFG.STARVING_MAX + self.func_expr_by_freq.get("N", 0) * CFG.N_EFFECT:
+            logger.debug("G%s_UID%d is now dead.", self.generation, self.uid)
+            return -1, children, uidnumber, generation
+
         self.energy_reserve = min(self.energy_reserve_max,
                                   self.energy_reserve + self.energy_aqui_efficiency - self.energy_consum_daily)
         if self.energy_reserve <= 0:
@@ -244,4 +245,21 @@ class Anima:
         else:
             self.starving = 0
 
-        # TODO: Make do_a_tick() fully functional, instead of still leaving sth. in cosmos() and reproduction()
+        if self.can_reproduce() and random.random() < self.reproduction_willing:
+            if self.can_double_reproduce():
+                children, uidnumber, generation = self.one_child(children, uidnumber, generation)
+            children, uidnumber, generation = self.one_child(children, uidnumber, generation)
+
+        self.life -= 1
+        return 0, children, uidnumber, generation
+
+    def one_child(self, children: list, uidnumber: int, generation: int) -> tuple[list, int, int]:
+        child = self.reproduction(uidnumber)
+        children.append(child)
+        logger.debug("G%s_UID%d -> G%s_UID%d",
+                        child.generation - 1, child.parent_uid,
+                        child.generation, child.uid)
+        logger.debug("%s", child.genome["functional"])
+        uidnumber += 1
+        generation = max(generation, child.generation)
+        return children, uidnumber, generation

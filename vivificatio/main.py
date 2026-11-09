@@ -9,7 +9,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Vivifiacatio")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Enable debug mode")
-    parser.add_argument("-r", "--rounds", type=int, default=100, help="Simulation rounds")
+    parser.add_argument("-r", "--rounds", type=int, default=10, help="Simulation rounds")
     parser.add_argument("-s", "--seed", type=int, default=None, help="Specify a random seed")
     args = parser.parse_args()
 
